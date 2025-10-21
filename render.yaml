@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: hn-feedback-server
+    env: node
+    buildCommand: npm install
+    startCommand: node feedback-server.js
+    envVars:
+      - key: NODE_ENV
+        value: production

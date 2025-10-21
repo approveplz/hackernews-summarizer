@@ -1,0 +1,24 @@
+{
+  "name": "hackernews-summarizer",
+  "version": "1.0.0",
+  "description": "AI-powered Hacker News digest that filters and summarizes yesterday's top stories",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "feedback": "node feedback-server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.12.2",
+    "cheerio": "^1.1.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "nodemailer": "^7.0.9",
+    "openai": "^6.6.0",
+    "resend": "^6.2.1"
+  }
+}

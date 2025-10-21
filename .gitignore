@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+
+# Generated files
+processed-stories.json
+feedback-history.json
+cron.log
+
+# HTML digests
+hn-digest-*.html
+
+# OS files
+.DS_Store

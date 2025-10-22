@@ -4,6 +4,7 @@ const OpenAI = require('openai');
 const cheerio = require('cheerio');
 const fs = require('fs');
 const path = require('path');
+const config = require('./config');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -11,7 +12,7 @@ const openai = new OpenAI({
 
 // Path to the processed stories history file
 const HISTORY_FILE = path.join(__dirname, 'processed-stories.json');
-const HISTORY_EXPIRY_DAYS = 7; // Keep history for 7 days
+const HISTORY_EXPIRY_DAYS = config.historyExpiryDays;
 
 // Path to the feedback history file
 const FEEDBACK_FILE = path.join(__dirname, 'feedback-history.json');
@@ -109,7 +110,7 @@ async function fetchTopStories() {
   const response = await axios.get('https://hn.algolia.com/api/v1/search', {
     params: {
       tags: 'front_page',
-      hitsPerPage: 10 // Get top 10 stories from front page
+      hitsPerPage: config.topStoriesCount
     }
   });
 
@@ -122,8 +123,8 @@ async function fetchStoryWithComments(storyId) {
   return response.data;
 }
 
-// Extract top comment threads (limit to top 5 comments)
-function extractTopComments(story, maxComments = 5) {
+// Extract top comment threads
+function extractTopComments(story, maxComments = config.maxCommentsPerStory) {
   if (!story.children || story.children.length === 0) {
     return [];
   }
@@ -199,13 +200,13 @@ Answer only YES or NO, followed by a brief one-sentence reason.`;
   return { isRelevant, reason: answer };
 }
 
-// Summarize relevant story
+// Summarize relevant story and extract key terms
 async function summarizeStory(story, comments, articleContent) {
   const topComments = comments.map((c, i) =>
     `Comment ${i + 1} by ${c.author}:\n${c.text}`
   ).join('\n\n');
 
-  const prompt = `Summarize this Hacker News story and discussion:
+  const summaryPrompt = `Summarize this Hacker News story and discussion:
 
 Title: ${story.title}
 URL: ${story.url || 'Discussion only'}
@@ -220,14 +221,35 @@ Provide:
 2. Key insights from the discussion
 3. Why this might be interesting or important`;
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-5',
-    messages: [
-      { role: 'user', content: prompt }
-    ]
-  });
+  const keyTermsPrompt = `Based on this Hacker News story and discussion, identify the 3-5 most important technical terms, concepts, or jargon that a reader should understand. For each term, provide a clear, beginner-friendly explanation (1-2 sentences).
 
-  return response.choices[0].message.content;
+Title: ${story.title}
+${articleContent ? `\nArticle content: ${articleContent.slice(0, 2000)}` : ''}
+
+Top HN comments:
+${topComments || 'No comments yet'}
+
+Format your response as a list where each item is:
+**Term**: Brief explanation
+
+Only include terms that are actually discussed in the article or comments.`;
+
+  // Run both prompts in parallel for efficiency
+  const [summaryResponse, keyTermsResponse] = await Promise.all([
+    openai.chat.completions.create({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: summaryPrompt }]
+    }),
+    openai.chat.completions.create({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: keyTermsPrompt }]
+    })
+  ]);
+
+  return {
+    summary: summaryResponse.choices[0].message.content,
+    keyTerms: keyTermsResponse.choices[0].message.content
+  };
 }
 
 // Generate HTML content for digest
@@ -290,6 +312,24 @@ function generateDigestHTML(summaries, date) {
       margin-top: 15px;
       white-space: pre-line;
     }
+    .key-terms {
+      margin-top: 20px;
+      padding: 15px;
+      background: #e8f4f8;
+      border-left: 3px solid #17a2b8;
+      border-radius: 4px;
+    }
+    .key-terms h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      color: #0c5460;
+      font-size: 1em;
+    }
+    .key-terms-content {
+      white-space: pre-line;
+      font-size: 0.95em;
+      line-height: 1.6;
+    }
     .feedback {
       margin-top: 20px;
       padding-top: 15px;
@@ -350,6 +390,10 @@ function generateDigestHTML(summaries, date) {
       </p>
       <div class="why-relevant"><strong>Why you might be interested:</strong> ${s.reason}</div>
       <div class="summary">${s.summary}</div>
+      ${s.keyTerms ? `<div class="key-terms">
+        <h3>📚 Key Terms & Concepts</h3>
+        <div class="key-terms-content">${s.keyTerms}</div>
+      </div>` : ''}
       <div class="feedback">
         <p>Was this story relevant to you?</p>
         <div class="feedback-buttons">
@@ -419,9 +463,8 @@ async function main() {
     let processedStories = loadProcessedStories();
     processedStories = cleanupOldEntries(processedStories);
 
-    // User interests (configure this in .env)
-    const userInterests = process.env.USER_INTERESTS ||
-      'AI, machine learning, startups, developer tools, programming languages';
+    // User interests (configure in config.js)
+    const userInterests = config.userInterests.join(', ');
 
     // Step 1: Fetch top stories
     const allStories = await fetchTopStories();
@@ -458,8 +501,8 @@ async function main() {
 
       if (isRelevant) {
         // Summarize
-        const summary = await summarizeStory(story, comments, articleContent);
-        relevantSummaries.push({ story, summary, reason });
+        const { summary, keyTerms } = await summarizeStory(story, comments, articleContent);
+        relevantSummaries.push({ story, summary, keyTerms, reason });
         console.log('  ✓ Added to digest\n');
       } else {
         console.log('  ✗ Skipped\n');

@@ -1,4 +1,5 @@
 services:
+  # Feedback server + Digest trigger endpoint
   - type: web
     name: hn-feedback-server
     env: node
@@ -7,3 +8,21 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Digest configuration
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: DELIVERY_METHOD
+        value: resend
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_TO
+        sync: false
+      - key: USER_INTERESTS
+        sync: false
+      - key: FEEDBACK_URL
+        sync: false  # Set this to your deployed server URL (e.g., https://hn-feedback-server.onrender.com)
+      # Security for cron trigger endpoint
+      - key: CRON_SECRET
+        sync: false  # Generate a random secret (e.g., openssl rand -hex 32)

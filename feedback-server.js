@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || process.env.FEEDBACK_PORT || 3000;
@@ -124,8 +125,56 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', feedbackCount: loadFeedback() });
 });
 
+// Trigger digest endpoint (for cron-job.org)
+app.get('/trigger-digest', (req, res) => {
+  const { secret } = req.query;
+
+  // Verify secret token
+  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  console.log('Digest triggered via cron endpoint');
+
+  // Spawn the digest script as a child process
+  const digest = spawn('node', ['index.js'], {
+    cwd: __dirname,
+    env: process.env
+  });
+
+  let output = '';
+  let errorOutput = '';
+
+  digest.stdout.on('data', (data) => {
+    const message = data.toString();
+    output += message;
+    console.log(message);
+  });
+
+  digest.stderr.on('data', (data) => {
+    const message = data.toString();
+    errorOutput += message;
+    console.error(message);
+  });
+
+  digest.on('close', (code) => {
+    if (code === 0) {
+      console.log('Digest completed successfully');
+    } else {
+      console.error(`Digest process exited with code ${code}`);
+    }
+  });
+
+  // Respond immediately (don't wait for digest to finish)
+  res.json({
+    status: 'started',
+    message: 'Digest generation started in background'
+  });
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Feedback server running on http://localhost:${PORT}`);
   console.log(`Feedback endpoint: http://localhost:${PORT}/feedback`);
+  console.log(`Digest trigger endpoint: http://localhost:${PORT}/trigger-digest`);
 });

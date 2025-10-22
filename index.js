@@ -395,24 +395,7 @@ const deliveryMethods = {
     });
 
     console.log('✓ Email sent via Resend');
-  },
-
-  // Example: SendGrid API (uncomment and configure when ready)
-  // sendgrid: async (summaries, date) => {
-  //   const sgMail = require('@sendgrid/mail');
-  //   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-  //
-  //   const html = generateDigestHTML(summaries, date);
-  //
-  //   await sgMail.send({
-  //     to: process.env.EMAIL_TO,
-  //     from: process.env.EMAIL_FROM,
-  //     subject: `HN Digest - ${summaries.length} relevant stories`,
-  //     html: html
-  //   });
-  //
-  //   console.log('✓ Email sent via SendGrid');
-  // }
+  }
 };
 
 // Deliver digest using configured method

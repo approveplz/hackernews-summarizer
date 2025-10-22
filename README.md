@@ -54,15 +54,39 @@ Save this - you'll use it to secure your digest trigger endpoint.
 
 ### Step 2: Deploy to Render
 
-1. Push your code to GitHub
-2. Go to https://render.com/dashboard
-3. Click "New +" → "Web Service"
-4. Connect your GitHub repository
-5. Render will auto-detect `render.yaml` and deploy
+1. **Push your code to GitHub**
+   ```bash
+   git add .
+   git commit -m "Deploy to Render"
+   git push
+   ```
+
+2. **Go to Render**: https://render.com/dashboard
+
+3. **Create a new Web Service**:
+   - Click "New +" → "Web Service"
+   - Connect your GitHub account (if not already connected)
+   - Select your `hackernews-summarizer` repository
+   - Render will detect the `render.yaml` file
+
+4. **Configure the service**:
+   - **Name**: `hn-feedback-server` (or any name you prefer)
+   - **Environment**: Node
+   - **Build Command**: `npm install`
+   - **Start Command**: `node feedback-server.js` (IMPORTANT: Not `index.js`!)
+   - Click "Create Web Service"
+
+5. **Wait for the build to complete** (2-3 minutes)
+   - You'll see build logs in real-time
+   - When successful, you'll get a URL like: `https://hn-feedback-server.onrender.com`
 
 ### Step 3: Configure Environment Variables in Render
 
-In your Render dashboard, add these environment variables:
+After deployment, add these environment variables:
+
+1. In your Render dashboard, click on your service
+2. Go to the "Environment" tab in the left sidebar
+3. Add each variable below:
 
 | Variable | Value | Description |
 |----------|-------|-------------|
@@ -74,27 +98,70 @@ In your Render dashboard, add these environment variables:
 | `CRON_SECRET` | `abc123...` | The secret token you generated |
 | `FEEDBACK_URL` | `https://your-app.onrender.com` | Your Render app URL |
 
-### Step 4: Setup Daily Automation with cron-job.org
+### Step 4: Setup Daily Automation with cron-job.org (FREE)
 
-1. Go to https://console.cron-job.org/jobs/create
-2. Configure your cron job:
-   - **Title**: HN Daily Digest
-   - **URL**: `https://your-app.onrender.com/trigger-digest?secret=YOUR_SECRET`
-   - **Schedule**: Daily at your preferred time (e.g., 9:00 AM)
-   - **Timezone**: Select your timezone
-3. Click "Create"
+Now let's set up the daily trigger using cron-job.org's free tier:
 
-### Step 5: Test It
+1. **Sign up for cron-job.org**:
+   - Go to https://console.cron-job.org/signup
+   - Create a free account (no credit card required)
+   - Verify your email
 
-Test your deployment manually:
+2. **Create a new cron job**:
+   - Go to https://console.cron-job.org/jobs/create
+   - Or click "Cronjobs" → "Create cronjob" in the dashboard
+
+3. **Configure the job**:
+   - **Title**: `HN Daily Digest`
+   - **Address (URL)**:
+     ```
+     https://hackernews-summarizer.onrender.com/trigger-digest?secret=aec9042c61baebd4a9537bb62d78d64dd16fa59f1571fa64a013fa2858f523a6
+     ```
+     (Replace with YOUR Render URL and YOUR secret token)
+
+   - **Schedule**:
+     - **Execution**: Every day
+     - **Time**: Choose your preferred time (e.g., `09:00`)
+     - **Timezone**: Select your timezone (e.g., `America/Los_Angeles`)
+
+   - **Notifications** (optional):
+     - Enable "Notify me on failure" to get alerts if it fails
+
+   - **Request method**: GET
+   - **Request timeout**: 30 seconds (or higher if needed)
+
+4. **Save the cron job**:
+   - Click "Create cronjob"
+   - You'll see it in your dashboard
+
+5. **Optional: Keep Render awake**:
+   - Render free tier sleeps after 15 minutes of inactivity
+   - First request after sleep takes ~30 seconds to wake up
+   - **Solution**: Create a second cron job to ping every 14 minutes:
+     - **Title**: `Keep HN Server Awake`
+     - **URL**: `https://hackernews-summarizer.onrender.com/health`
+     - **Schedule**: Every 14 minutes (cron expression: `*/14 * * * *`)
+     - This keeps your server warm and ensures fast digest generation
+
+### Step 5: Test Your Setup
+
+**Test the trigger endpoint manually:**
 
 ```bash
-curl "https://your-app.onrender.com/trigger-digest?secret=YOUR_SECRET"
+curl "https://hackernews-summarizer.onrender.com/trigger-digest?secret=aec9042c61baebd4a9537bb62d78d64dd16fa59f1571fa64a013fa2858f523a6"
 ```
 
-You should get: `{"status":"started","message":"Digest generation started in background"}`
+**Expected response:**
+```json
+{"status":"started","message":"Digest generation started in background"}
+```
 
-Check your email in a few minutes!
+**Check your email** in 2-3 minutes! You should receive a digest with relevant HN stories.
+
+**Verify in cron-job.org:**
+- Go to your dashboard
+- Check the "Executions" tab for your job
+- You should see a successful execution with status 200
 
 ## How It Works
 

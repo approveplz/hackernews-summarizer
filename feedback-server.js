@@ -1,44 +1,18 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
 const { spawn } = require('child_process');
+const db = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || process.env.FEEDBACK_PORT || 3000;
-
-// Feedback storage file
-const FEEDBACK_FILE = path.join(__dirname, 'feedback-history.json');
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Load existing feedback
-function loadFeedback() {
-  try {
-    if (fs.existsSync(FEEDBACK_FILE)) {
-      const data = fs.readFileSync(FEEDBACK_FILE, 'utf8');
-      return JSON.parse(data);
-    }
-  } catch (error) {
-    console.error('Error loading feedback:', error.message);
-  }
-  return { positive: [], negative: [] };
-}
-
-// Save feedback
-function saveFeedback(feedback) {
-  try {
-    fs.writeFileSync(FEEDBACK_FILE, JSON.stringify(feedback, null, 2), 'utf8');
-  } catch (error) {
-    console.error('Error saving feedback:', error.message);
-  }
-}
-
 // Feedback endpoint
-app.get('/feedback', (req, res) => {
+app.get('/feedback', async (req, res) => {
   const { story, rating, title, url } = req.query;
 
   if (!story || !rating) {
@@ -49,22 +23,13 @@ app.get('/feedback', (req, res) => {
     return res.status(400).send('Rating must be "positive" or "negative"');
   }
 
-  // Load existing feedback
-  const feedback = loadFeedback();
-
-  // Add new feedback entry
-  const entry = {
-    storyId: story,
-    title: decodeURIComponent(title || 'Unknown'),
-    url: decodeURIComponent(url || ''),
-    timestamp: Date.now(),
-    userInterests: process.env.USER_INTERESTS || 'Not specified'
-  };
-
-  feedback[rating].push(entry);
-
-  // Save updated feedback
-  saveFeedback(feedback);
+  // Save feedback to database
+  await db.saveFeedback(
+    story,
+    decodeURIComponent(title || 'Unknown'),
+    decodeURIComponent(url || ''),
+    rating
+  );
 
   console.log(`Feedback received: ${rating} for story ${story}`);
 
@@ -121,8 +86,15 @@ app.get('/feedback', (req, res) => {
 });
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', feedbackCount: loadFeedback() });
+app.get('/health', async (req, res) => {
+  const feedback = await db.loadFeedback();
+  res.json({
+    status: 'ok',
+    feedbackCount: {
+      positive: feedback.positive.length,
+      negative: feedback.negative.length
+    }
+  });
 });
 
 // Trigger digest endpoint (for cron-job.org)
@@ -172,9 +144,109 @@ app.get('/trigger-digest', (req, res) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Feedback server running on http://localhost:${PORT}`);
-  console.log(`Feedback endpoint: http://localhost:${PORT}/feedback`);
-  console.log(`Digest trigger endpoint: http://localhost:${PORT}/trigger-digest`);
+// Get all interests
+app.get('/interests', async (req, res) => {
+  try {
+    const interests = await db.loadInterests();
+    res.json({
+      count: interests.length,
+      interests: interests
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load interests' });
+  }
 });
+
+// Replace all interests (requires secret)
+app.post('/interests', async (req, res) => {
+  const { secret, interests } = req.body;
+
+  // Verify secret token
+  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (!Array.isArray(interests)) {
+    return res.status(400).json({ error: 'interests must be an array' });
+  }
+
+  try {
+    await db.saveInterests(interests);
+    res.json({
+      success: true,
+      message: `Updated interests (${interests.length} total)`,
+      interests: interests
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to save interests' });
+  }
+});
+
+// Add a single interest (requires secret)
+app.post('/interests/add', async (req, res) => {
+  const { secret, interest } = req.body;
+
+  // Verify secret token
+  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (!interest || typeof interest !== 'string') {
+    return res.status(400).json({ error: 'interest must be a string' });
+  }
+
+  try {
+    await db.addInterest(interest);
+    const allInterests = await db.loadInterests();
+    res.json({
+      success: true,
+      message: `Added interest: ${interest}`,
+      interests: allInterests
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to add interest' });
+  }
+});
+
+// Remove a single interest (requires secret)
+app.delete('/interests/:interest', async (req, res) => {
+  const { secret } = req.query;
+  const { interest } = req.params;
+
+  // Verify secret token
+  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    await db.removeInterest(interest);
+    const allInterests = await db.loadInterests();
+    res.json({
+      success: true,
+      message: `Removed interest: ${interest}`,
+      interests: allInterests
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to remove interest' });
+  }
+});
+
+// Initialize database and start server
+async function startServer() {
+  try {
+    // Initialize database tables
+    await db.initializeDatabase();
+
+    // Start Express server
+    app.listen(PORT, () => {
+      console.log(`Feedback server running on http://localhost:${PORT}`);
+      console.log(`Feedback endpoint: http://localhost:${PORT}/feedback`);
+      console.log(`Digest trigger endpoint: http://localhost:${PORT}/trigger-digest`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();

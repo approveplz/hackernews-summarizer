@@ -2,82 +2,12 @@ require('dotenv').config();
 const axios = require('axios');
 const OpenAI = require('openai');
 const cheerio = require('cheerio');
-const fs = require('fs');
-const path = require('path');
 const config = require('./config');
+const db = require('./db');
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
-
-// Path to the processed stories history file
-const HISTORY_FILE = path.join(__dirname, 'processed-stories.json');
-const HISTORY_EXPIRY_DAYS = config.historyExpiryDays;
-
-// Path to the feedback history file
-const FEEDBACK_FILE = path.join(__dirname, 'feedback-history.json');
-
-// Load processed stories history
-function loadProcessedStories() {
-  try {
-    if (fs.existsSync(HISTORY_FILE)) {
-      const data = fs.readFileSync(HISTORY_FILE, 'utf8');
-      return JSON.parse(data);
-    }
-  } catch (error) {
-    console.error('Error loading processed stories:', error.message);
-  }
-  return {};
-}
-
-// Save processed stories history
-function saveProcessedStories(history) {
-  try {
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf8');
-  } catch (error) {
-    console.error('Error saving processed stories:', error.message);
-  }
-}
-
-// Clean up old entries from history
-function cleanupOldEntries(history) {
-  const now = Date.now();
-  const expiryTime = HISTORY_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
-
-  let cleaned = 0;
-  for (const [storyId, timestamp] of Object.entries(history)) {
-    if (now - timestamp > expiryTime) {
-      delete history[storyId];
-      cleaned++;
-    }
-  }
-
-  if (cleaned > 0) {
-    console.log(`Cleaned up ${cleaned} old entries from history`);
-    saveProcessedStories(history);
-  }
-
-  return history;
-}
-
-// Add story to processed history
-function markStoryAsProcessed(history, storyId) {
-  history[storyId] = Date.now();
-  saveProcessedStories(history);
-}
-
-// Load feedback history
-function loadFeedback() {
-  try {
-    if (fs.existsSync(FEEDBACK_FILE)) {
-      const data = fs.readFileSync(FEEDBACK_FILE, 'utf8');
-      return JSON.parse(data);
-    }
-  } catch (error) {
-    console.error('Error loading feedback:', error.message);
-  }
-  return { positive: [], negative: [] };
-}
 
 // Format feedback examples for prompt
 function formatFeedbackExamples(feedback) {
@@ -169,7 +99,7 @@ async function checkRelevance(story, comments, articleContent, userInterests) {
   ).join('\n\n');
 
   // Load feedback to improve relevance detection
-  const feedback = loadFeedback();
+  const feedback = await db.loadFeedback();
   const feedbackExamples = formatFeedbackExamples(feedback);
 
   const prompt = `You are helping filter Hacker News stories based on user interests.
@@ -459,12 +389,25 @@ async function main() {
   try {
     console.log('Starting HN summarizer...\n');
 
-    // Load and cleanup processed stories history
-    let processedStories = loadProcessedStories();
-    processedStories = cleanupOldEntries(processedStories);
+    // Initialize database
+    await db.initializeDatabase();
 
-    // User interests (configure in config.js)
-    const userInterests = config.userInterests.join(', ');
+    // Load and cleanup processed stories history
+    const processedStories = await db.loadProcessedStories();
+    await db.cleanupOldEntries(config.historyExpiryDays);
+
+    // Load user interests from database
+    let interests = await db.loadInterests();
+
+    // If no interests in database, seed from config.js (first run)
+    if (interests.length === 0) {
+      console.log('No interests found in database, seeding from config...');
+      await db.saveInterests(config.userInterests);
+      interests = config.userInterests;
+    }
+
+    const userInterests = interests.join(', ');
+    console.log(`Using interests: ${userInterests}\n`);
 
     // Step 1: Fetch top stories
     const allStories = await fetchTopStories();
@@ -509,7 +452,7 @@ async function main() {
       }
 
       // Mark story as processed (whether relevant or not)
-      markStoryAsProcessed(processedStories, story.objectID);
+      await db.markStoryAsProcessed(story.objectID);
 
       // Add delay to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -524,8 +467,12 @@ async function main() {
     }
 
     console.log('\nDone!');
+
+    // Close database connection
+    await db.closePool();
   } catch (error) {
     console.error('Error:', error);
+    await db.closePool();
     process.exit(1);
   }
 }

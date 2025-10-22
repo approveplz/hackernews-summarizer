@@ -231,6 +231,276 @@ app.delete('/interests/:interest', async (req, res) => {
   }
 });
 
+// Manage term page (shows decision buttons)
+app.get('/manage-term', (req, res) => {
+  const { term } = req.query;
+
+  if (!term) {
+    return res.status(400).send('Missing term parameter');
+  }
+
+  const encodedTerm = encodeURIComponent(term);
+  const feedbackUrl = process.env.FEEDBACK_URL || 'http://localhost:3000';
+
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Manage Term: ${term}</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          min-height: 100vh;
+          margin: 0;
+          background: #f5f5f5;
+        }
+        .container {
+          text-align: center;
+          padding: 40px;
+          background: white;
+          border-radius: 12px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          max-width: 500px;
+        }
+        h1 {
+          color: #333;
+          margin: 0 0 10px 0;
+          font-size: 24px;
+        }
+        .term {
+          font-size: 32px;
+          font-weight: bold;
+          color: #ff6600;
+          margin: 20px 0;
+        }
+        p {
+          color: #666;
+          margin-bottom: 30px;
+        }
+        .buttons {
+          display: flex;
+          gap: 15px;
+          flex-direction: column;
+        }
+        .btn {
+          display: block;
+          padding: 15px 30px;
+          text-decoration: none;
+          border-radius: 8px;
+          font-weight: 500;
+          font-size: 16px;
+          transition: all 0.2s;
+        }
+        .btn-interest {
+          background: #28a745;
+          color: white;
+        }
+        .btn-interest:hover {
+          background: #218838;
+        }
+        .btn-not-interested {
+          background: #dc3545;
+          color: white;
+        }
+        .btn-not-interested:hover {
+          background: #c82333;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>Manage Term</h1>
+        <div class="term">"${term}"</div>
+        <p>What would you like to do with this term?</p>
+        <div class="buttons">
+          <a href="${feedbackUrl}/interests/add-term?term=${encodedTerm}" class="btn btn-interest">
+            ➕ Add to My Interests
+          </a>
+          <a href="${feedbackUrl}/not-interested/add-term?term=${encodedTerm}" class="btn btn-not-interested">
+            ➖ Not Interested
+          </a>
+        </div>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
+// Add term to interests
+app.get('/interests/add-term', async (req, res) => {
+  const { term } = req.query;
+
+  if (!term) {
+    return res.status(400).send('Missing term parameter');
+  }
+
+  await db.addInterest(term);
+  console.log(`Added term to interests: ${term}`);
+
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Term Added</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          height: 100vh;
+          margin: 0;
+          background: #f5f5f5;
+        }
+        .container {
+          text-align: center;
+          padding: 40px;
+          background: white;
+          border-radius: 12px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          max-width: 400px;
+        }
+        .icon {
+          font-size: 64px;
+          margin-bottom: 20px;
+        }
+        h1 {
+          color: #333;
+          margin: 0 0 10px 0;
+          font-size: 24px;
+        }
+        .term {
+          font-weight: bold;
+          color: #28a745;
+        }
+        p {
+          color: #666;
+          line-height: 1.6;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="icon">✅</div>
+        <h1>Added to Interests</h1>
+        <p><span class="term">"${term}"</span> has been added to your interests.</p>
+        <p>Future digests will prioritize stories related to this topic.</p>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
+// Add term to not interested list
+app.get('/not-interested/add-term', async (req, res) => {
+  const { term } = req.query;
+
+  if (!term) {
+    return res.status(400).send('Missing term parameter');
+  }
+
+  await db.addNotInterested(term);
+  console.log(`Added term to not interested: ${term}`);
+
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Term Blocked</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          height: 100vh;
+          margin: 0;
+          background: #f5f5f5;
+        }
+        .container {
+          text-align: center;
+          padding: 40px;
+          background: white;
+          border-radius: 12px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          max-width: 400px;
+        }
+        .icon {
+          font-size: 64px;
+          margin-bottom: 20px;
+        }
+        h1 {
+          color: #333;
+          margin: 0 0 10px 0;
+          font-size: 24px;
+        }
+        .term {
+          font-weight: bold;
+          color: #dc3545;
+        }
+        p {
+          color: #666;
+          line-height: 1.6;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="icon">🚫</div>
+        <h1>Marked as Not Interested</h1>
+        <p><span class="term">"${term}"</span> has been added to your exclusion list.</p>
+        <p>Future digests will avoid stories heavily featuring this topic.</p>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
+// Get all not interested terms
+app.get('/not-interested', async (req, res) => {
+  try {
+    const terms = await db.loadNotInterested();
+    res.json({
+      count: terms.length,
+      terms: terms
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load not interested terms' });
+  }
+});
+
+// Remove a term from not interested list (requires secret)
+app.delete('/not-interested/:term', async (req, res) => {
+  const { secret } = req.query;
+  const { term } = req.params;
+
+  // Verify secret token
+  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    await db.removeNotInterested(term);
+    const allTerms = await db.loadNotInterested();
+    res.json({
+      success: true,
+      message: `Removed term from not interested: ${term}`,
+      terms: allTerms
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to remove term' });
+  }
+});
+
 // Initialize database and start server
 async function startServer() {
   try {

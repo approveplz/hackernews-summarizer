@@ -102,9 +102,15 @@ async function checkRelevance(story, comments, articleContent, userInterests) {
   const feedback = await db.loadFeedback();
   const feedbackExamples = formatFeedbackExamples(feedback);
 
+  // Load not interested terms to avoid those topics
+  const notInterested = await db.loadNotInterested();
+  const notInterestedText = notInterested.length > 0
+    ? `\n\nUser is NOT interested in: ${notInterested.join(', ')}\n\nAVOID stories heavily featuring these topics.`
+    : '';
+
   const prompt = `You are helping filter Hacker News stories based on user interests.
 
-User interests: ${userInterests}
+User interests: ${userInterests}${notInterestedText}
 ${feedbackExamples}
 
 Story title: ${story.title}
@@ -114,7 +120,8 @@ ${articleContent ? `Article content (excerpt): ${articleContent.slice(0, 1000)}`
 Top comments from HN discussion:
 ${topComments || 'No comments yet'}
 
-Based on the user's interests, the story content, the HN discussion, and the examples of past feedback, is this story relevant?
+Based on the user's interests, NOT interested topics, the story content, the HN discussion, and the examples of past feedback, is this story relevant?
+Prioritize stories matching interests. AVOID stories primarily about not-interested topics.
 Answer only YES or NO, followed by a brief one-sentence reason.`;
 
   const response = await openai.chat.completions.create({
@@ -180,6 +187,18 @@ Only include terms that are actually discussed in the article or comments.`;
     summary: summaryResponse.choices[0].message.content,
     keyTerms: keyTermsResponse.choices[0].message.content
   };
+}
+
+// Parse key terms and wrap them as clickable links
+function parseKeyTermsAsLinks(keyTermsText, feedbackUrl) {
+  if (!keyTermsText) return '';
+
+  // Match pattern: **Term**: explanation
+  // Make each **Term** clickable
+  return keyTermsText.replace(/\*\*([^*]+)\*\*:/g, (match, term) => {
+    const encodedTerm = encodeURIComponent(term.trim());
+    return `<strong><a href="${feedbackUrl}/manage-term?term=${encodedTerm}" style="color: #0c5460; text-decoration: none; border-bottom: 2px dotted #17a2b8;">${term}</a></strong>:`;
+  });
 }
 
 // Generate HTML content for digest
@@ -322,7 +341,7 @@ function generateDigestHTML(summaries, date) {
       <div class="summary">${s.summary}</div>
       ${s.keyTerms ? `<div class="key-terms">
         <h3>📚 Key Terms & Concepts</h3>
-        <div class="key-terms-content">${s.keyTerms}</div>
+        <div class="key-terms-content">${parseKeyTermsAsLinks(s.keyTerms, feedbackUrl)}</div>
       </div>` : ''}
       <div class="feedback">
         <p>Was this story relevant to you?</p>

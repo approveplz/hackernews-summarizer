@@ -40,6 +40,15 @@ async function initializeDatabase() {
       )
     `);
 
+    // Create not_interested table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS not_interested (
+        id SERIAL PRIMARY KEY,
+        term TEXT NOT NULL UNIQUE,
+        created_at BIGINT NOT NULL
+      )
+    `);
+
     console.log('Database tables initialized');
   } catch (error) {
     console.error('Error initializing database:', error);
@@ -197,6 +206,38 @@ async function removeInterest(interest) {
   }
 }
 
+// Load not interested terms from database
+async function loadNotInterested() {
+  try {
+    const result = await pool.query('SELECT term FROM not_interested ORDER BY id ASC');
+    return result.rows.map(row => row.term);
+  } catch (error) {
+    console.error('Error loading not interested terms:', error);
+    return [];
+  }
+}
+
+// Add a term to not interested list
+async function addNotInterested(term) {
+  try {
+    await pool.query(
+      'INSERT INTO not_interested (term, created_at) VALUES ($1, $2) ON CONFLICT (term) DO NOTHING',
+      [term, Date.now()]
+    );
+  } catch (error) {
+    console.error('Error adding not interested term:', error);
+  }
+}
+
+// Remove a term from not interested list
+async function removeNotInterested(term) {
+  try {
+    await pool.query('DELETE FROM not_interested WHERE term = $1', [term]);
+  } catch (error) {
+    console.error('Error removing not interested term:', error);
+  }
+}
+
 // Close pool (for graceful shutdown)
 async function closePool() {
   await pool.end();
@@ -213,5 +254,8 @@ module.exports = {
   saveInterests,
   addInterest,
   removeInterest,
+  loadNotInterested,
+  addNotInterested,
+  removeNotInterested,
   closePool
 };

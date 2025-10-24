@@ -2,6 +2,8 @@ require('dotenv').config();
 const axios = require('axios');
 const OpenAI = require('openai');
 const cheerio = require('cheerio');
+const fs = require('fs');
+const path = require('path');
 const config = require('./config');
 const db = require('./db');
 

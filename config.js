@@ -2,32 +2,17 @@
 // Update this file and push to GitHub - Render will auto-deploy with new settings
 
 module.exports = {
-  // Your interests for filtering HN stories
-  // The AI will use these to determine which stories are relevant to you
-  userInterests: [
-    'AI',
-    'machine learning',
-    'AI agents',
-    'prompt engineering',
-    'startups',
-    'developer tools',
-    'programming languages',
-    'web development',
-    'serverless',
-    'distributed systems',
-    'Node.js',
-    'TypeScript',
-    'JavaScript',
-    'world events',
-    'finance'
-  ],
+    // Number of top stories to fetch from HN
+    topStoriesCount: 50,
 
-  // Number of top stories to fetch from HN
-  topStoriesCount: 10,
+    // Maximum number of relevant stories to include in digest
+    maxRelevantStories: 10,
 
-  // How many days to keep processed story history
-  historyExpiryDays: 7,
+    // How many days to keep processed story history
+    historyExpiryDays: 7,
 
-  // Maximum number of comments to analyze per story
-  maxCommentsPerStory: 5
+    // Comment extraction settings
+    maxRootComments: 5, // Top-level comments to fetch
+    maxRepliesPerComment: 3, // Best replies per comment thread
+    maxCommentDepth: 2, // How deep to recurse into nested replies
 };

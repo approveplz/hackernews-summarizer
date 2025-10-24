@@ -501,6 +501,36 @@ app.delete('/not-interested/:term', async (req, res) => {
   }
 });
 
+// Clear all processed stories (requires secret)
+app.delete('/processed-stories', async (req, res) => {
+  const { secret } = req.query;
+
+  // Verify secret token
+  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const { Pool } = require('pg');
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+
+    const result = await pool.query('DELETE FROM processed_stories');
+    await pool.end();
+
+    res.json({
+      success: true,
+      message: `Cleared ${result.rowCount} processed stories`,
+      cleared: result.rowCount
+    });
+  } catch (error) {
+    console.error('Error clearing processed stories:', error);
+    res.status(500).json({ error: 'Failed to clear processed stories' });
+  }
+});
+
 // Initialize database and start server
 async function startServer() {
   try {

@@ -360,49 +360,22 @@ function generateDigestHTML(summaries, date) {
   `.trim();
 }
 
-// Delivery methods - easy to swap or extend
-const deliveryMethods = {
-  // Save to local HTML file
-  file: async (summaries, date) => {
-    const html = generateDigestHTML(summaries, date);
-    const filename = `hn-digest-${date}.html`;
-    const filepath = path.join(process.cwd(), filename);
-
-    fs.writeFileSync(filepath, html, 'utf8');
-    console.log(`✓ Digest saved to: ${filename}`);
-    console.log(`  Open with: open ${filename}`);
-
-    return filepath;
-  },
-
-  // Resend API
-  resend: async (summaries, date) => {
-    const { Resend } = require('resend');
-    const resend = new Resend(process.env.RESEND_API_KEY);
-
-    const html = generateDigestHTML(summaries, date);
-
-    await resend.emails.send({
-      from: process.env.EMAIL_FROM,
-      to: process.env.EMAIL_TO,
-      subject: `HN Digest - ${summaries.length} relevant stories from ${date}`,
-      html: html
-    });
-
-    console.log('✓ Email sent via Resend');
-  }
-};
-
-// Deliver digest using configured method
+// Deliver digest via Resend email
 async function deliverDigest(summaries) {
   const date = new Date().toISOString().split('T')[0];
-  const method = process.env.DELIVERY_METHOD || 'file';
+  const { Resend } = require('resend');
+  const resend = new Resend(process.env.RESEND_API_KEY);
 
-  if (!deliveryMethods[method]) {
-    throw new Error(`Unknown delivery method: ${method}. Available: ${Object.keys(deliveryMethods).join(', ')}`);
-  }
+  const html = generateDigestHTML(summaries, date);
 
-  return await deliveryMethods[method](summaries, date);
+  await resend.emails.send({
+    from: process.env.EMAIL_FROM,
+    to: process.env.EMAIL_TO,
+    subject: `HN Digest - ${summaries.length} relevant stories from ${date}`,
+    html: html
+  });
+
+  console.log('✓ Email sent via Resend');
 }
 
 // Main function
